@@ -48,6 +48,10 @@ class PDFHeader {
 
     return offset - initialOffset;
   }
+
+  serialize(): Buffer {
+
+  }
 }
 
 export default PDFHeader;

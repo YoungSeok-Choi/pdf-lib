@@ -8,7 +8,7 @@ export enum ParseSpeeds {
   Slow = 100,
 }
 
-export interface AttachmentOptions extends EmbeddedFileOptions {}
+export interface AttachmentOptions extends EmbeddedFileOptions { }
 
 export interface SaveOptions {
   useObjectStreams?: boolean;
@@ -19,6 +19,11 @@ export interface SaveOptions {
 
 export interface Base64SaveOptions extends SaveOptions {
   dataUri?: boolean;
+}
+
+export interface FileSaveOptions extends SaveOptions {
+  destPath: string;
+  forceWrite?: boolean;
 }
 
 export interface LoadOptions {

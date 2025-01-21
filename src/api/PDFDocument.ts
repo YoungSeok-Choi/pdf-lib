@@ -50,6 +50,7 @@ import {
   CreateOptions,
   EmbedFontOptions,
   SetTitleOptions,
+  FileSaveOptions,
 } from './PDFDocumentOptions';
 import PDFObject from '../core/objects/PDFObject';
 import PDFRef from '../core/objects/PDFRef';
@@ -1011,11 +1012,11 @@ export default class PDFDocument {
       const fontkit = this.assertFontkit();
       embedder = subset
         ? await CustomFontSubsetEmbedder.for(
-            fontkit,
-            bytes,
-            customName,
-            features,
-          )
+          fontkit,
+          bytes,
+          customName,
+          features,
+        )
         : await CustomFontEmbedder.for(fontkit, bytes, customName, features);
     } else {
       throw new TypeError(
@@ -1333,7 +1334,7 @@ export default class PDFDocument {
    *
    * @returns Resolves when the flush is complete.
    */
-  async flush(): Promise<void> {
+  async flush(): Promise<void> { // 사용자에게 전달받은 컨텐츠들을 모두 embed
     await this.embedAll(this.fonts);
     await this.embedAll(this.images);
     await this.embedAll(this.embeddedPages);
@@ -1358,28 +1359,10 @@ export default class PDFDocument {
    * @returns Resolves with the bytes of the serialized document.
    */
   async save(options: SaveOptions = {}): Promise<Uint8Array> {
-    const {
-      useObjectStreams = true,
-      addDefaultPage = true,
-      objectsPerTick = 50,
-      updateFieldAppearances = true,
-    } = options;
+    const defaultOptions = this.getDefaultSaveOptions(options);
+    const { objectsPerTick } = defaultOptions;
 
-    assertIs(useObjectStreams, 'useObjectStreams', ['boolean']);
-    assertIs(addDefaultPage, 'addDefaultPage', ['boolean']);
-    assertIs(objectsPerTick, 'objectsPerTick', ['number']);
-    assertIs(updateFieldAppearances, 'updateFieldAppearances', ['boolean']);
-
-    if (addDefaultPage && this.getPageCount() === 0) this.addPage();
-
-    if (updateFieldAppearances) {
-      const form = this.formCache.getValue();
-      if (form) form.updateFieldAppearances();
-    }
-
-    await this.flush();
-
-    const Writer = useObjectStreams ? PDFStreamWriter : PDFWriter;
+    const Writer = await this.validateAndGetAdaptWriter(defaultOptions);
     return Writer.forContext(this.context, objectsPerTick).serializeToBuffer();
   }
 
@@ -1406,6 +1389,34 @@ export default class PDFDocument {
     return dataUri ? `data:application/pdf;base64,${base64}` : base64;
   }
 
+  // ward: 파일 경로를 입력받아 저장하는 함수
+  /**
+   * 기능에 대한 설명을 명시할 것.
+   * Serialize this document to a base64 encoded string or data URI making up a
+   * PDF file. For example:
+   * ```js
+   * const base64String = await pdfDoc.saveAsBase64()
+   * base64String // => 'JVBERi0xLjcKJYGBgYEKC...'
+   *
+   * const base64DataUri = await pdfDoc.saveAsBase64({ dataUri: true })
+   * base64DataUri // => 'data:application/pdf;base64,JVBERi0xLjcKJYGBgYEKC...'
+   * ```
+   *
+   * @param options 파일이 쓰일 임시 저장경로를 입력받는다.
+   * @returns PDF파일이 작성된 임시 저장경로를 반환한다.
+   *          serialized document.
+   */
+  async saveToTargetPath(options: FileSaveOptions): Promise<string> {
+
+    options && options.destPath && assertIs(options.destPath, "destPath", ["string"]);
+    const resolvedSaveOptions = this.getDefaultSaveOptions(options);
+    const { objectsPerTick } = resolvedSaveOptions;
+
+    const Writer = await this.validateAndGetAdaptWriter(resolvedSaveOptions);
+    return Writer.forContext(this.context, objectsPerTick).writeToTargetPath(options.destPath);
+  }
+
+
   findPageForAnnotationRef(ref: PDFRef): PDFPage | undefined {
     const pages = this.getPages();
     for (let idx = 0, len = pages.length; idx < len; idx++) {
@@ -1418,6 +1429,46 @@ export default class PDFDocument {
     }
 
     return undefined;
+  }
+
+  private async validateAndGetAdaptWriter(options: SaveOptions): Promise<typeof PDFStreamWriter | typeof PDFWriter> {
+    const {
+      useObjectStreams,
+      addDefaultPage,
+      objectsPerTick,
+      updateFieldAppearances,
+    } = options;
+
+    assertIs(useObjectStreams, 'useObjectStreams', ['boolean']);
+    assertIs(addDefaultPage, 'addDefaultPage', ['boolean']);
+    assertIs(objectsPerTick, 'objectsPerTick', ['number']);
+    assertIs(updateFieldAppearances, 'updateFieldAppearances', ['boolean']);
+
+    if (addDefaultPage && this.getPageCount() === 0) this.addPage();
+
+    if (updateFieldAppearances) {
+      const form = this.formCache.getValue();
+      if (form) form.updateFieldAppearances();
+    }
+
+    await this.flush();
+    return useObjectStreams ? PDFStreamWriter : PDFWriter;
+  }
+
+  private getDefaultSaveOptions(options: SaveOptions): {
+    useObjectStreams: boolean;
+    addDefaultPage: boolean;
+    objectsPerTick: number;
+    updateFieldAppearances: boolean;
+  } {
+    const {
+      useObjectStreams = true,
+      addDefaultPage = true,
+      objectsPerTick = 50,
+      updateFieldAppearances = true,
+    } = options;
+
+    return { useObjectStreams, addDefaultPage, objectsPerTick, updateFieldAppearances };
   }
 
   private async embedAll(embeddables: Embeddable[]): Promise<void> {
