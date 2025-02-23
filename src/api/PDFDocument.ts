@@ -1,22 +1,8 @@
 import {
-  parse as parseHtml,
   HTMLElement,
   NodeType,
+  parse as parseHtml,
 } from 'node-html-better-parser';
-import Embeddable from './Embeddable';
-import {
-  EncryptedPDFError,
-  FontkitNotRegisteredError,
-  ForeignPageError,
-  RemovePageFromEmptyDocumentError,
-} from './errors';
-import PDFEmbeddedPage from './PDFEmbeddedPage';
-import PDFFont from './PDFFont';
-import PDFImage from './PDFImage';
-import PDFPage from './PDFPage';
-import PDFForm from './form/PDFForm';
-import { PageSizes } from './sizes';
-import { StandardFonts } from './StandardFonts';
 import {
   CustomFontEmbedder,
   CustomFontSubsetEmbedder,
@@ -41,19 +27,12 @@ import {
   StandardFontEmbedder,
   UnexpectedObjectTypeError,
 } from '../core';
-import {
-  ParseSpeeds,
-  AttachmentOptions,
-  SaveOptions,
-  Base64SaveOptions,
-  LoadOptions,
-  CreateOptions,
-  EmbedFontOptions,
-  SetTitleOptions,
-  FileSaveOptions,
-} from './PDFDocumentOptions';
+import { CipherTransformFactory } from '../core/crypto';
+import FileEmbedder, { AFRelationship } from '../core/embedders/FileEmbedder';
+import JavaScriptEmbedder from '../core/embedders/JavaScriptEmbedder';
 import PDFObject from '../core/objects/PDFObject';
 import PDFRef from '../core/objects/PDFRef';
+import PDFSecurity, { SecurityOptions } from '../core/security/PDFSecurity';
 import { Fontkit } from '../types/fontkit';
 import { TransformationMatrix } from '../types/matrix';
 import {
@@ -69,13 +48,34 @@ import {
   range,
   toUint8Array,
 } from '../utils';
-import FileEmbedder, { AFRelationship } from '../core/embedders/FileEmbedder';
+import Embeddable from './Embeddable';
+import {
+  EncryptedPDFError,
+  FontkitNotRegisteredError,
+  ForeignPageError,
+  RemovePageFromEmptyDocumentError,
+} from './errors';
+import PDFForm from './form/PDFForm';
+import {
+  AttachmentOptions,
+  Base64SaveOptions,
+  CreateOptions,
+  EmbedFontOptions,
+  FileSaveOptions,
+  LoadOptions,
+  ParseSpeeds,
+  SaveOptions,
+  SetTitleOptions,
+} from './PDFDocumentOptions';
 import PDFEmbeddedFile from './PDFEmbeddedFile';
+import PDFEmbeddedPage from './PDFEmbeddedPage';
+import PDFFont from './PDFFont';
+import PDFImage from './PDFImage';
 import PDFJavaScript from './PDFJavaScript';
-import JavaScriptEmbedder from '../core/embedders/JavaScriptEmbedder';
-import { CipherTransformFactory } from '../core/crypto';
+import PDFPage from './PDFPage';
 import PDFSvg from './PDFSvg';
-import PDFSecurity, { SecurityOptions } from '../core/security/PDFSecurity';
+import { PageSizes } from './sizes';
+import { StandardFonts } from './StandardFonts';
 
 /**
  * Represents a PDF document.
@@ -1394,14 +1394,14 @@ export default class PDFDocument {
    * Serialize this document to specific directory path formed with A PDF file
    * For example:
    * ```js
-   * const pdfBuffer = await saveToTargetPath { destPath: "/some/your/directory.pdf" }
+   * const pdfBuffer = await saveAsStream { destPath: "/some/your/directory.pdf" }
    * ```
    *
    * @param options The options are used to determine which path to write
-   * @returns Serialized Buffer Array from input Destination Path which is located The PDF file
+   * @returns Serialized Readable Stream from input Destination Path which is located The PDF file
    *
    */
-  async saveToTargetPath(options: FileSaveOptions): Promise<Uint8Array> {
+  async saveAsStream(options: FileSaveOptions): Promise<boolean> {
     options && options.outputPath && assertIsValidString(options.outputPath);
     const resolvedSaveOptions = this.getDefaultSaveOptions(options);
     const { objectsPerTick } = resolvedSaveOptions;
@@ -1409,7 +1409,10 @@ export default class PDFDocument {
     const Writer = await this.validateAndGetAdaptWriter(resolvedSaveOptions);
     const { outputPath, forceWrite } = options;
 
-    return Writer.forContext(this.context, objectsPerTick).writeToTargetPath({
+    return Writer.forContext(
+      this.context,
+      objectsPerTick,
+    ).writeToTargetPathWithStream({
       outputPath,
       forceWrite: forceWrite !== undefined ? forceWrite : true,
     });

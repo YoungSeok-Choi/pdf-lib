@@ -187,19 +187,57 @@ describe(`PDFDocument`, () => {
 
       const savedDoc1 = await pdfDoc1.save();
 
-      const savedDoc2 = await pdfDoc2.saveToTargetPath({
+      const savedDoc2 = await pdfDoc2.saveAsStream({
         outputPath: validWriteTargetPath,
         forceWrite: true,
       });
 
-      const savedDoc3 = await pdfDoc3.saveToTargetPath({
+      const savedDoc3 = await pdfDoc3.saveAsStream({
         outputPath: anotherValidWriteTargetPath,
         forceWrite: true,
       });
 
-      expect(savedDoc1).toEqual(savedDoc2);
-      expect(savedDoc1).toEqual(savedDoc3);
-      expect(savedDoc2).toEqual(savedDoc3);
+      expect(savedDoc2).toBe(true);
+      expect(savedDoc3).toBe(true);
+
+      const byteArrayDoc2 = new Uint8Array(
+        fs.readFileSync(validWriteTargetPath),
+      );
+      const byteArrayDoc3 = new Uint8Array(
+        fs.readFileSync(anotherValidWriteTargetPath),
+      );
+
+      expect(savedDoc1).toEqual(byteArrayDoc2);
+      expect(savedDoc1).toEqual(byteArrayDoc3);
+      expect(byteArrayDoc2).toEqual(byteArrayDoc3);
+    });
+  });
+
+  describe('memory Test', () => {
+    it('uses more less memory than save()', async () => {
+      const customFont = fs.readFileSync('assets/fonts/ubuntu/Ubuntu-B.ttf');
+      const pdfDoc1 = await PDFDocument.create({ updateMetadata: false });
+      const pdfDoc2 = await PDFDocument.create({ updateMetadata: false });
+
+      pdfDoc1.registerFontkit(fontkit);
+      pdfDoc2.registerFontkit(fontkit);
+
+      await pdfDoc1.embedFont(customFont);
+      await pdfDoc2.embedFont(customFont);
+
+      const savedDoc1 = await pdfDoc1.save();
+      const savedDoc2 = await pdfDoc2.saveAsStream({
+        outputPath: validWriteTargetPath,
+        forceWrite: true,
+      });
+
+      expect(savedDoc2).toBe(true);
+
+      const byteArrayDoc2 = new Uint8Array(
+        fs.readFileSync(validWriteTargetPath),
+      );
+
+      expect(savedDoc1).toEqual(byteArrayDoc2);
     });
   });
 
@@ -596,7 +634,7 @@ describe(`PDFDocument`, () => {
     it(`should throw an error when provided with an invalid target directory path`, async () => {
       const pdfDoc = await PDFDocument.create();
       await expect(
-        pdfDoc.saveToTargetPath({
+        pdfDoc.saveAsStream({
           outputPath: path.join(invalidDirPath, validFileName),
           forceWrite: false,
         }),
@@ -606,7 +644,7 @@ describe(`PDFDocument`, () => {
     it(`should throw an error when no file name is provided in the output path`, async () => {
       const pdfDoc = await PDFDocument.create();
       await expect(
-        pdfDoc.saveToTargetPath({
+        pdfDoc.saveAsStream({
           outputPath: validDirPath, // Directory only, no file name
           forceWrite: true,
         }),
@@ -616,7 +654,7 @@ describe(`PDFDocument`, () => {
     it(`should throw an error when the file name does not have a .pdf extension`, async () => {
       const pdfDoc = await PDFDocument.create();
       await expect(
-        pdfDoc.saveToTargetPath({
+        pdfDoc.saveAsStream({
           outputPath: path.join(validDirPath, invalidFileName),
           forceWrite: true,
         }),
@@ -630,12 +668,12 @@ describe(`PDFDocument`, () => {
       const nonExistingDirPath = path.join(validDirPath, 'created_dir');
       const outputPath = path.join(nonExistingDirPath, 'created_dir_test.pdf');
 
-      await expect(
-        pdfDoc.saveToTargetPath({
+      expect(
+        await pdfDoc.saveAsStream({
           outputPath,
           forceWrite: true,
         }),
-      ).resolves.toBeInstanceOf(Uint8Array);
+      ).toBe(true);
 
       // Ensure the directory and file are created
       expect(fs.existsSync(nonExistingDirPath)).toBe(true);
@@ -647,7 +685,7 @@ describe(`PDFDocument`, () => {
       const outputPath = path.join(invalidDirPath, validFileName);
 
       await expect(
-        pdfDoc.saveToTargetPath({
+        pdfDoc.saveAsStream({
           outputPath,
           forceWrite: false,
         }),
@@ -679,12 +717,17 @@ describe(`PDFDocument`, () => {
       });
 
       const saveBytes = await pdfDoc.save();
-      const saveToTargetBytes = await pdfDoc.saveToTargetPath({
+      const result = await pdfDoc.saveAsStream({
         outputPath: path.join(validDirPath, validFileName),
         forceWrite: true,
       });
 
-      expect(saveToTargetBytes).toEqual(saveBytes);
+      expect(result).toBe(true);
+
+      const saveAsStreamBytes = new Uint8Array(
+        fs.readFileSync(path.join(validDirPath, validFileName)),
+      );
+      expect(saveAsStreamBytes).toEqual(saveBytes);
 
       const writtenBytes = new Uint8Array(
         fs.readFileSync(path.join(validDirPath, validFileName)),

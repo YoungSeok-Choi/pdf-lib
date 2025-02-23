@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { FileSaveOptions } from 'src/api';
-import { Writable } from 'stream';
+import { PassThrough, Writable } from 'stream';
+import { pipeline } from 'stream/promises';
 import {
   convertStringToUnicodeArray,
   copyStringIntoBuffer,
@@ -43,9 +44,9 @@ class PDFWriter {
     this.objectsPerTick = objectsPerTick;
   }
 
-  async writeToTargetPath(
+  async writeToTargetPathWithStream(
     options: Pick<FileSaveOptions, 'forceWrite' | 'outputPath'>,
-  ): Promise<Uint8Array> {
+  ): Promise<boolean> {
     const { outputPath, forceWrite } = options;
     const splitPath = outputPath.split('/');
     const fileName = splitPath.pop();
@@ -69,17 +70,11 @@ class PDFWriter {
     }
 
     const destWriteStream = fs.createWriteStream(path.join(dirPath, fileName));
+    const pdfStream = new PassThrough();
+    this.serializeToStream(pdfStream).then(() => pdfStream.end());
 
-    await new Promise<void>((res, rej) => {
-      destWriteStream.on('finish', res);
-      destWriteStream.on('error', rej);
-
-      this.serializeToStream(destWriteStream)
-        .then(() => destWriteStream.end())
-        .catch(rej);
-    });
-
-    return new Uint8Array(fs.readFileSync(outputPath));
+    await pipeline(pdfStream, destWriteStream);
+    return true;
   }
 
   async serializeToStream(destStream: Writable): Promise<void> {
