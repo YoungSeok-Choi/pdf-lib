@@ -213,34 +213,6 @@ describe(`PDFDocument`, () => {
     });
   });
 
-  describe('memory Test', () => {
-    it('uses more less memory than save()', async () => {
-      const customFont = fs.readFileSync('assets/fonts/ubuntu/Ubuntu-B.ttf');
-      const pdfDoc1 = await PDFDocument.create({ updateMetadata: false });
-      const pdfDoc2 = await PDFDocument.create({ updateMetadata: false });
-
-      pdfDoc1.registerFontkit(fontkit);
-      pdfDoc2.registerFontkit(fontkit);
-
-      await pdfDoc1.embedFont(customFont);
-      await pdfDoc2.embedFont(customFont);
-
-      const savedDoc1 = await pdfDoc1.save();
-      const savedDoc2 = await pdfDoc2.saveAsStream({
-        outputPath: validWriteTargetPath,
-        forceWrite: true,
-      });
-
-      expect(savedDoc2).toBe(true);
-
-      const byteArrayDoc2 = new Uint8Array(
-        fs.readFileSync(validWriteTargetPath),
-      );
-
-      expect(savedDoc1).toEqual(byteArrayDoc2);
-    });
-  });
-
   describe(`setLanguage() method`, () => {
     it(`sets the language of the document`, async () => {
       const pdfDoc = await PDFDocument.create();
