@@ -8,4 +8,5 @@ export * from './base64';
 export * from './objects';
 export * from './validators';
 export * from './pdfDocEncoding';
+export * from './streams';
 export { default as Cache } from './Cache';

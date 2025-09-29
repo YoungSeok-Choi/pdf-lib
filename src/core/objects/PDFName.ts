@@ -8,6 +8,7 @@ import {
   copyStringIntoBuffer,
   toCharCode,
   toHexString,
+  writeToStream,
 } from '../../utils';
 import { Writable } from 'stream';
 
@@ -157,8 +158,8 @@ class PDFName extends PDFObject {
     return this.encodedName.length;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(convertStringToUnicodeArray(this.encodedName));
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, convertStringToUnicodeArray(this.encodedName));
   }
 }
 

@@ -709,6 +709,69 @@ describe(`PDFDocument`, () => {
     });
   });
 
+  describe(`saveToFileDescriptor() method`, () => {
+    const descriptorDirPath = path.join('assets', 'pdfs', 'stream', 'fd');
+    const descriptorFilePath = path.join(
+      descriptorDirPath,
+      'descriptor_output.pdf',
+    );
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      if (!fs.existsSync(descriptorDirPath)) {
+        fs.mkdirSync(descriptorDirPath, { recursive: true });
+      }
+      if (fs.existsSync(descriptorFilePath)) {
+        fs.unlinkSync(descriptorFilePath);
+      }
+    });
+
+    afterEach(() => {
+      if (fs.existsSync(descriptorFilePath)) {
+        fs.unlinkSync(descriptorFilePath);
+      }
+    });
+
+    it(`writes the same bytes as save() using a provided file descriptor`, async () => {
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.setTitle('File descriptor save test');
+      pdfDoc.addPage();
+
+      const saveBytes = await pdfDoc.save();
+
+      const fd = fs.openSync(descriptorFilePath, 'w');
+      try {
+        const result = await pdfDoc.saveToFileDescriptor({
+          outputPath: descriptorFilePath,
+          fd,
+          forceWrite: true,
+        });
+
+        expect(result).toBe(true);
+        const descriptorBytes = new Uint8Array(
+          fs.readFileSync(descriptorFilePath),
+        );
+        expect(descriptorBytes).toEqual(saveBytes);
+
+        const stats = fs.fstatSync(fd);
+        expect(stats.size).toBeGreaterThan(0);
+      } finally {
+        fs.closeSync(fd);
+      }
+    });
+
+    it(`throws when an invalid file descriptor is provided`, async () => {
+      const pdfDoc = await PDFDocument.create();
+      await expect(
+        pdfDoc.saveToFileDescriptor({
+          outputPath: descriptorFilePath,
+          fd: -1,
+          forceWrite: true,
+        }),
+      ).rejects.toThrow('Invalid file descriptor.');
+    });
+  });
+
   describe(`copy() method`, () => {
     let pdfDoc: PDFDocument;
     let srcDoc: PDFDocument;

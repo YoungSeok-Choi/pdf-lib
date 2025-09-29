@@ -61,6 +61,7 @@ import {
   Base64SaveOptions,
   CreateOptions,
   EmbedFontOptions,
+  FileDescriptorSaveOptions,
   FileSaveOptions,
   LoadOptions,
   ParseSpeeds,
@@ -1402,6 +1403,7 @@ export default class PDFDocument {
    *
    */
   async saveAsStream(options: FileSaveOptions): Promise<boolean> {
+    /* tslint:disable-next-line no-unused-expression */
     options && options.outputPath && assertIsValidString(options.outputPath);
     const resolvedSaveOptions = this.getDefaultSaveOptions(options);
     const { objectsPerTick } = resolvedSaveOptions;
@@ -1414,6 +1416,39 @@ export default class PDFDocument {
       objectsPerTick,
     ).writeToTargetPathWithStream({
       outputPath,
+      forceWrite: forceWrite !== undefined ? forceWrite : true,
+    });
+  }
+
+  /**
+   * Serialize this document directly into a Node.js file descriptor using a
+   * streaming writer. The descriptor should be opened in a writable mode prior
+   * to calling this method.
+   *
+   * @param options Destination details including the path (used for
+   * validation) and file descriptor to write into.
+   * @returns Resolves with `true` once serialization completes.
+   */
+  async saveToFileDescriptor(
+    options: FileDescriptorSaveOptions,
+  ): Promise<boolean> {
+    /* tslint:disable-next-line no-unused-expression */
+    options && options.outputPath && assertIsValidString(options.outputPath);
+    assertIsValidFileDescriptor(options.fd);
+
+    const resolvedSaveOptions = this.getDefaultSaveOptions(options);
+    const { objectsPerTick } = resolvedSaveOptions;
+
+    const Writer = await this.validateAndGetAdaptWriter(resolvedSaveOptions);
+    const { outputPath, forceWrite, fd, autoClose } = options;
+
+    return Writer.forContext(
+      this.context,
+      objectsPerTick,
+    ).writeToTargetDescriptorWithStream({
+      outputPath,
+      fd,
+      autoClose,
       forceWrite: forceWrite !== undefined ? forceWrite : true,
     });
   }
@@ -1546,6 +1581,14 @@ function assertIsLiteralOrHexString(
   }
 }
 
+/* tslint:disable-next-line only-arrow-functions */
+function assertIsValidFileDescriptor(fd?: any): asserts fd is number {
+  if (!Number.isInteger(fd) || fd < 0) {
+    throw new Error('Invalid file descriptor.');
+  }
+}
+
+/* tslint:disable-next-line only-arrow-functions */
 function assertIsValidString(str?: any): str is string {
   return str !== null && str !== undefined && typeof str === 'string';
 }

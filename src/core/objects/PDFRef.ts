@@ -1,6 +1,10 @@
 import { PrivateConstructorError } from '../errors';
 import PDFObject from '../objects/PDFObject';
-import { convertStringToUnicodeArray, copyStringIntoBuffer } from '../../utils';
+import {
+  convertStringToUnicodeArray,
+  copyStringIntoBuffer,
+  writeToStream,
+} from '../../utils';
 import { Writable } from 'stream';
 
 const ENFORCER = {};
@@ -52,8 +56,8 @@ class PDFRef extends PDFObject {
     return this.tag.length;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(convertStringToUnicodeArray(this.tag));
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, convertStringToUnicodeArray(this.tag));
   }
 }
 

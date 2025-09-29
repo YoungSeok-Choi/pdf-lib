@@ -6,6 +6,7 @@ import PDFObject from './PDFObject';
 import PDFContext from '../PDFContext';
 import CharCodes from '../syntax/CharCodes';
 import { Writable } from 'stream';
+import { writeToStream } from '../../utils';
 
 class PDFStream extends PDFObject {
   readonly dict: PDFDict;
@@ -97,12 +98,13 @@ class PDFStream extends PDFObject {
     return offset - initialOffset;
   }
 
-  writeBytesInto(stream: Writable): void {
+  async writeBytesInto(stream: Writable): Promise<void> {
     this.updateDict();
 
-    this.dict.writeBytesInto(stream);
+    await this.dict.writeBytesInto(stream);
 
-    stream.write(
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.Newline,
         CharCodes.s,
@@ -115,11 +117,10 @@ class PDFStream extends PDFObject {
       ]),
     );
 
-    this.getContents().forEach((content) =>
-      stream.write(Buffer.from([content])),
-    );
+    await writeToStream(stream, this.getContents());
 
-    stream.write(
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.Newline,
         CharCodes.e,

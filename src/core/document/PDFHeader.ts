@@ -4,6 +4,7 @@ import {
   charFromCode,
   convertStringToUnicodeArray,
   copyStringIntoBuffer,
+  writeToStream,
 } from '../../utils';
 
 class PDFHeader {
@@ -54,8 +55,9 @@ class PDFHeader {
     return offset - initialOffset;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.Percent,
         CharCodes.P,
@@ -64,11 +66,14 @@ class PDFHeader {
         CharCodes.Dash,
       ]),
     );
-    stream.write(convertStringToUnicodeArray(this.major));
-    stream.write(Buffer.from([CharCodes.Period]));
-    stream.write(convertStringToUnicodeArray(this.minor));
-    stream.write(Buffer.from([CharCodes.Newline]));
-    stream.write(Buffer.from([CharCodes.Percent, 129, 129, 129, 129]));
+    await writeToStream(stream, convertStringToUnicodeArray(this.major));
+    await writeToStream(stream, Buffer.from([CharCodes.Period]));
+    await writeToStream(stream, convertStringToUnicodeArray(this.minor));
+    await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+    await writeToStream(
+      stream,
+      Buffer.from([CharCodes.Percent, 129, 129, 129, 129]),
+    );
   }
 }
 

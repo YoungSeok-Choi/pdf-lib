@@ -1,6 +1,7 @@
 import { Writable } from 'stream';
 import PDFDict from '../objects/PDFDict';
 import CharCodes from '../syntax/CharCodes';
+import { writeToStream } from '../../utils';
 
 class PDFTrailerDict {
   static of = (dict: PDFDict) => new PDFTrailerDict(dict);
@@ -36,8 +37,9 @@ class PDFTrailerDict {
     return offset - initialOffset;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.t,
         CharCodes.r,
@@ -50,7 +52,7 @@ class PDFTrailerDict {
       ]),
     );
 
-    this.dict.writeBytesInto(stream);
+    await this.dict.writeBytesInto(stream);
   }
 }
 

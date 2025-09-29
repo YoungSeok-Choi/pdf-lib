@@ -9,6 +9,7 @@ import {
   parseDate,
   hasUtf16BOM,
   convertStringToUnicodeArray,
+  writeToStream,
 } from '../../utils';
 import { InvalidPDFDateStringError } from '../errors';
 import { Writable } from 'stream';
@@ -116,10 +117,10 @@ class PDFString extends PDFObject {
     return this.value.length + 2;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(Buffer.from([CharCodes.LeftParen]));
-    stream.write(convertStringToUnicodeArray(this.value));
-    stream.write(Buffer.from([CharCodes.RightParen]));
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, Buffer.from([CharCodes.LeftParen]));
+    await writeToStream(stream, convertStringToUnicodeArray(this.value));
+    await writeToStream(stream, Buffer.from([CharCodes.RightParen]));
   }
 }
 

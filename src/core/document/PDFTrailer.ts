@@ -1,5 +1,9 @@
 import CharCodes from '../syntax/CharCodes';
-import { convertStringToUnicodeArray, copyStringIntoBuffer } from '../../utils';
+import {
+  convertStringToUnicodeArray,
+  copyStringIntoBuffer,
+  writeToStream,
+} from '../../utils';
 import { Writable } from 'stream';
 
 class PDFTrailer {
@@ -46,8 +50,9 @@ class PDFTrailer {
     return offset - initialOffset;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.s,
         CharCodes.t,
@@ -62,9 +67,13 @@ class PDFTrailer {
       ]),
     );
 
-    stream.write(convertStringToUnicodeArray(this.lastXRefOffset));
+    await writeToStream(
+      stream,
+      convertStringToUnicodeArray(this.lastXRefOffset),
+    );
 
-    stream.write(
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.Newline,
         CharCodes.Percent,

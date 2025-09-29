@@ -10,6 +10,7 @@ import {
   hasUtf16BOM,
   byteArrayToHexString,
   convertStringToUnicodeArray,
+  writeToStream,
 } from '../../utils';
 import { InvalidPDFDateStringError } from '../errors';
 import { Writable } from 'stream';
@@ -96,10 +97,10 @@ class PDFHexString extends PDFObject {
     return this.value.length + 2;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(Buffer.from([CharCodes.LessThan]));
-    stream.write(convertStringToUnicodeArray(this.value));
-    stream.write(Buffer.from([CharCodes.GreaterThan]));
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, Buffer.from([CharCodes.LessThan]));
+    await writeToStream(stream, convertStringToUnicodeArray(this.value));
+    await writeToStream(stream, Buffer.from([CharCodes.GreaterThan]));
   }
 }
 

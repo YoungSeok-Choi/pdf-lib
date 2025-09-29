@@ -5,6 +5,7 @@ import {
   convertStringToUnicodeArray,
   copyStringIntoBuffer,
   padStart,
+  writeToStream,
 } from '../../utils';
 
 export interface Entry {
@@ -87,8 +88,9 @@ class PDFCrossRefSection {
     return size;
   }
 
-  writeBytesInto(stream: Writable) {
-    stream.write(
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
       Buffer.from([
         CharCodes.x,
         CharCodes.r,
@@ -98,32 +100,39 @@ class PDFCrossRefSection {
       ]),
     );
 
-    const writeEntriesIntoStream = (entries: Entry[], stream: Writable) => {
-      entries.forEach((entry) => {
-        const entryOffset = padStart(String(entry.offset), 10, '0');
-        stream.write(convertStringToUnicodeArray(entryOffset));
-        stream.write(Buffer.from([CharCodes.Space]));
-
-        const entryGen = padStart(String(entry.ref.generationNumber), 5, '0');
-        stream.write(convertStringToUnicodeArray(entryGen));
-        stream.write(Buffer.from([CharCodes.Space]));
-        stream.write(Buffer.from([entry.deleted ? CharCodes.f : CharCodes.n]));
-        stream.write(Buffer.from([CharCodes.Space]));
-        stream.write(Buffer.from([CharCodes.Newline]));
-      });
-    };
-
-    // NOTE: String그냥쓰는 코드 있는지 확인해야해....
-    this.subsections.forEach((subsection) => {
-      stream.write(
+    const subsectionsLength = this.subsections.length;
+    for (let rangeIdx = 0; rangeIdx < subsectionsLength; rangeIdx++) {
+      const subsection = this.subsections[rangeIdx];
+      await writeToStream(
+        stream,
         convertStringToUnicodeArray(String(subsection[0].ref.objectNumber)),
       );
-      stream.write(Buffer.from([CharCodes.Space]));
+      await writeToStream(stream, Buffer.from([CharCodes.Space]));
 
-      stream.write(convertStringToUnicodeArray(String(subsection.length)));
-      stream.write(Buffer.from([CharCodes.Newline]));
-      writeEntriesIntoStream(subsection, stream);
-    });
+      await writeToStream(
+        stream,
+        convertStringToUnicodeArray(String(subsection.length)),
+      );
+      await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+
+      const entryLength = subsection.length;
+      for (let entryIdx = 0; entryIdx < entryLength; entryIdx++) {
+        const entry = subsection[entryIdx];
+        const entryOffset = padStart(String(entry.offset), 10, '0');
+        await writeToStream(stream, convertStringToUnicodeArray(entryOffset));
+        await writeToStream(stream, Buffer.from([CharCodes.Space]));
+
+        const entryGen = padStart(String(entry.ref.generationNumber), 5, '0');
+        await writeToStream(stream, convertStringToUnicodeArray(entryGen));
+        await writeToStream(stream, Buffer.from([CharCodes.Space]));
+        await writeToStream(
+          stream,
+          Buffer.from([entry.deleted ? CharCodes.f : CharCodes.n]),
+        );
+        await writeToStream(stream, Buffer.from([CharCodes.Space]));
+        await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+      }
+    }
   }
 
   copyBytesInto(buffer: Uint8Array, offset: number): number {

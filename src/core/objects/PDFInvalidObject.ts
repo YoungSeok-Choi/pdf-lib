@@ -1,5 +1,6 @@
 import { Writable } from 'stream';
 import PDFObject from './PDFObject';
+import { writeToStream } from '../../utils';
 
 class PDFInvalidObject extends PDFObject {
   static of = (data: Uint8Array) => new PDFInvalidObject(data);
@@ -31,8 +32,8 @@ class PDFInvalidObject extends PDFObject {
     return length;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(this.data);
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, this.data);
   }
 }
 

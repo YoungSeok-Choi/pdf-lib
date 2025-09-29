@@ -3,7 +3,8 @@ import {
   convertStringToUnicodeArray,
   copyStringIntoBuffer,
   numberToString,
-} from '../../utils/index';
+  writeToStream,
+} from '../../utils';
 
 import PDFObject from './PDFObject';
 
@@ -45,8 +46,8 @@ class PDFNumber extends PDFObject {
     return this.stringValue.length;
   }
 
-  writeBytesInto(stream: Writable): void {
-    stream.write(convertStringToUnicodeArray(this.stringValue));
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, convertStringToUnicodeArray(this.stringValue));
   }
 }
 

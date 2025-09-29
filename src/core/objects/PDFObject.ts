@@ -19,7 +19,7 @@ class PDFObject {
     throw new MethodNotImplementedError(this.constructor.name, 'copyBytesInto');
   }
 
-  writeBytesInto(_stream: Writable): void {
+  async writeBytesInto(_stream: Writable): Promise<void> {
     throw new MethodNotImplementedError(
       this.constructor.name,
       'writeBytesInto',

@@ -26,6 +26,11 @@ export interface FileSaveOptions extends SaveOptions {
   forceWrite?: boolean;
 }
 
+export interface FileDescriptorSaveOptions extends FileSaveOptions {
+  fd: number;
+  autoClose?: boolean;
+}
+
 export interface LoadOptions {
   ignoreEncryption?: boolean;
   parseSpeed?: ParseSpeeds | number;
