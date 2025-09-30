@@ -121,6 +121,7 @@ class PDFWriter {
 
     fs.accessSync(dirPath);
     fs.rmSync(dirPath);
+    destWriteStream.close();
 
     return true;
   }
