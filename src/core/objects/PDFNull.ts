@@ -1,5 +1,7 @@
 import PDFObject from './PDFObject';
 import CharCodes from '../syntax/CharCodes';
+import { Writable } from 'stream';
+import { writeToStream } from '../../utils';
 
 class PDFNull extends PDFObject {
   asNull(): null {
@@ -24,6 +26,13 @@ class PDFNull extends PDFObject {
     buffer[offset++] = CharCodes.l;
     buffer[offset++] = CharCodes.l;
     return 4;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
+      Buffer.from([CharCodes.n, CharCodes.u, CharCodes.l, CharCodes.l]),
+    );
   }
 }
 

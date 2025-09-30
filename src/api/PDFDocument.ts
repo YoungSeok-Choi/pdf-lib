@@ -1,22 +1,8 @@
 import {
-  parse as parseHtml,
   HTMLElement,
   NodeType,
+  parse as parseHtml,
 } from 'node-html-better-parser';
-import Embeddable from './Embeddable';
-import {
-  EncryptedPDFError,
-  FontkitNotRegisteredError,
-  ForeignPageError,
-  RemovePageFromEmptyDocumentError,
-} from './errors';
-import PDFEmbeddedPage from './PDFEmbeddedPage';
-import PDFFont from './PDFFont';
-import PDFImage from './PDFImage';
-import PDFPage from './PDFPage';
-import PDFForm from './form/PDFForm';
-import { PageSizes } from './sizes';
-import { StandardFonts } from './StandardFonts';
 import {
   CustomFontEmbedder,
   CustomFontSubsetEmbedder,
@@ -41,18 +27,12 @@ import {
   StandardFontEmbedder,
   UnexpectedObjectTypeError,
 } from '../core';
-import {
-  ParseSpeeds,
-  AttachmentOptions,
-  SaveOptions,
-  Base64SaveOptions,
-  LoadOptions,
-  CreateOptions,
-  EmbedFontOptions,
-  SetTitleOptions,
-} from './PDFDocumentOptions';
+import { CipherTransformFactory } from '../core/crypto';
+import FileEmbedder, { AFRelationship } from '../core/embedders/FileEmbedder';
+import JavaScriptEmbedder from '../core/embedders/JavaScriptEmbedder';
 import PDFObject from '../core/objects/PDFObject';
 import PDFRef from '../core/objects/PDFRef';
+import PDFSecurity, { SecurityOptions } from '../core/security/PDFSecurity';
 import { Fontkit } from '../types/fontkit';
 import { TransformationMatrix } from '../types/matrix';
 import {
@@ -68,13 +48,35 @@ import {
   range,
   toUint8Array,
 } from '../utils';
-import FileEmbedder, { AFRelationship } from '../core/embedders/FileEmbedder';
+import Embeddable from './Embeddable';
+import {
+  EncryptedPDFError,
+  FontkitNotRegisteredError,
+  ForeignPageError,
+  RemovePageFromEmptyDocumentError,
+} from './errors';
+import PDFForm from './form/PDFForm';
+import {
+  AttachmentOptions,
+  Base64SaveOptions,
+  CreateOptions,
+  EmbedFontOptions,
+  FileDescriptorSaveOptions,
+  FileSaveOptions,
+  LoadOptions,
+  ParseSpeeds,
+  SaveOptions,
+  SetTitleOptions,
+} from './PDFDocumentOptions';
 import PDFEmbeddedFile from './PDFEmbeddedFile';
+import PDFEmbeddedPage from './PDFEmbeddedPage';
+import PDFFont from './PDFFont';
+import PDFImage from './PDFImage';
 import PDFJavaScript from './PDFJavaScript';
-import JavaScriptEmbedder from '../core/embedders/JavaScriptEmbedder';
-import { CipherTransformFactory } from '../core/crypto';
+import PDFPage from './PDFPage';
 import PDFSvg from './PDFSvg';
-import PDFSecurity, { SecurityOptions } from '../core/security/PDFSecurity';
+import { PageSizes } from './sizes';
+import { StandardFonts } from './StandardFonts';
 
 /**
  * Represents a PDF document.
@@ -1358,28 +1360,10 @@ export default class PDFDocument {
    * @returns Resolves with the bytes of the serialized document.
    */
   async save(options: SaveOptions = {}): Promise<Uint8Array> {
-    const {
-      useObjectStreams = true,
-      addDefaultPage = true,
-      objectsPerTick = 50,
-      updateFieldAppearances = true,
-    } = options;
+    const defaultOptions = this.getDefaultSaveOptions(options);
+    const { objectsPerTick } = defaultOptions;
 
-    assertIs(useObjectStreams, 'useObjectStreams', ['boolean']);
-    assertIs(addDefaultPage, 'addDefaultPage', ['boolean']);
-    assertIs(objectsPerTick, 'objectsPerTick', ['number']);
-    assertIs(updateFieldAppearances, 'updateFieldAppearances', ['boolean']);
-
-    if (addDefaultPage && this.getPageCount() === 0) this.addPage();
-
-    if (updateFieldAppearances) {
-      const form = this.formCache.getValue();
-      if (form) form.updateFieldAppearances();
-    }
-
-    await this.flush();
-
-    const Writer = useObjectStreams ? PDFStreamWriter : PDFWriter;
+    const Writer = await this.validateAndGetAdaptWriter(defaultOptions);
     return Writer.forContext(this.context, objectsPerTick).serializeToBuffer();
   }
 
@@ -1406,6 +1390,69 @@ export default class PDFDocument {
     return dataUri ? `data:application/pdf;base64,${base64}` : base64;
   }
 
+  /**
+   *
+   * Serialize this document to specific directory path formed with A PDF file
+   * For example:
+   * ```js
+   * const pdfBuffer = await saveAsStream { destPath: "/some/your/directory.pdf" }
+   * ```
+   *
+   * @param options The options are used to determine which path to write
+   * @returns Serialized Readable Stream from input Destination Path which is located The PDF file
+   *
+   */
+  async saveAsStream(options: FileSaveOptions): Promise<boolean> {
+    /* tslint:disable-next-line no-unused-expression */
+    options && options.outputPath && assertIsValidString(options.outputPath);
+    const resolvedSaveOptions = this.getDefaultSaveOptions(options);
+    const { objectsPerTick } = resolvedSaveOptions;
+
+    const Writer = await this.validateAndGetAdaptWriter(resolvedSaveOptions);
+    const { outputPath, forceWrite } = options;
+
+    return Writer.forContext(
+      this.context,
+      objectsPerTick,
+    ).writeToTargetPathWithStream({
+      outputPath,
+      forceWrite: forceWrite !== undefined ? forceWrite : true,
+    });
+  }
+
+  /**
+   * Serialize this document directly into a Node.js file descriptor using a
+   * streaming writer. The descriptor should be opened in a writable mode prior
+   * to calling this method.
+   *
+   * @param options Destination details including the path (used for
+   * validation) and file descriptor to write into.
+   * @returns Resolves with `true` once serialization completes.
+   */
+  async saveToFileDescriptor(
+    options: FileDescriptorSaveOptions,
+  ): Promise<boolean> {
+    /* tslint:disable-next-line no-unused-expression */
+    options && options.outputPath && assertIsValidString(options.outputPath);
+    assertIsValidFileDescriptor(options.fd);
+
+    const resolvedSaveOptions = this.getDefaultSaveOptions(options);
+    const { objectsPerTick } = resolvedSaveOptions;
+
+    const Writer = await this.validateAndGetAdaptWriter(resolvedSaveOptions);
+    const { outputPath, forceWrite, fd, autoClose } = options;
+
+    return Writer.forContext(
+      this.context,
+      objectsPerTick,
+    ).writeToTargetDescriptorWithStream({
+      outputPath,
+      fd,
+      autoClose,
+      forceWrite: forceWrite !== undefined ? forceWrite : true,
+    });
+  }
+
   findPageForAnnotationRef(ref: PDFRef): PDFPage | undefined {
     const pages = this.getPages();
     for (let idx = 0, len = pages.length; idx < len; idx++) {
@@ -1418,6 +1465,53 @@ export default class PDFDocument {
     }
 
     return undefined;
+  }
+
+  private async validateAndGetAdaptWriter(
+    options: SaveOptions,
+  ): Promise<typeof PDFStreamWriter | typeof PDFWriter> {
+    const {
+      useObjectStreams,
+      addDefaultPage,
+      objectsPerTick,
+      updateFieldAppearances,
+    } = options;
+
+    assertIs(useObjectStreams, 'useObjectStreams', ['boolean']);
+    assertIs(addDefaultPage, 'addDefaultPage', ['boolean']);
+    assertIs(objectsPerTick, 'objectsPerTick', ['number']);
+    assertIs(updateFieldAppearances, 'updateFieldAppearances', ['boolean']);
+
+    if (addDefaultPage && this.getPageCount() === 0) this.addPage();
+
+    if (updateFieldAppearances) {
+      const form = this.formCache.getValue();
+      if (form) form.updateFieldAppearances();
+    }
+
+    await this.flush();
+    return useObjectStreams ? PDFStreamWriter : PDFWriter;
+  }
+
+  private getDefaultSaveOptions(options: SaveOptions): {
+    useObjectStreams: boolean;
+    addDefaultPage: boolean;
+    objectsPerTick: number;
+    updateFieldAppearances: boolean;
+  } {
+    const {
+      useObjectStreams = true,
+      addDefaultPage = true,
+      objectsPerTick = 50,
+      updateFieldAppearances = true,
+    } = options;
+
+    return {
+      useObjectStreams,
+      addDefaultPage,
+      objectsPerTick,
+      updateFieldAppearances,
+    };
   }
 
   private async embedAll(embeddables: Embeddable[]): Promise<void> {
@@ -1485,4 +1579,16 @@ function assertIsLiteralOrHexString(
   ) {
     throw new UnexpectedObjectTypeError([PDFHexString, PDFString], pdfObject);
   }
+}
+
+/* tslint:disable-next-line only-arrow-functions */
+function assertIsValidFileDescriptor(fd?: any): asserts fd is number {
+  if (!Number.isInteger(fd) || fd < 0) {
+    throw new Error('Invalid file descriptor.');
+  }
+}
+
+/* tslint:disable-next-line only-arrow-functions */
+function assertIsValidString(str?: any): str is string {
+  return str !== null && str !== undefined && typeof str === 'string';
 }

@@ -1,6 +1,12 @@
+import { Writable } from 'stream';
 import PDFRef from '../objects/PDFRef';
 import CharCodes from '../syntax/CharCodes';
-import { copyStringIntoBuffer, padStart } from '../../utils';
+import {
+  convertStringToUnicodeArray,
+  copyStringIntoBuffer,
+  padStart,
+  writeToStream,
+} from '../../utils';
 
 export interface Entry {
   ref: PDFRef;
@@ -80,6 +86,53 @@ class PDFCrossRefSection {
       size += 20 * subsectionLength;
     }
     return size;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
+      Buffer.from([
+        CharCodes.x,
+        CharCodes.r,
+        CharCodes.e,
+        CharCodes.f,
+        CharCodes.Newline,
+      ]),
+    );
+
+    const subsectionsLength = this.subsections.length;
+    for (let rangeIdx = 0; rangeIdx < subsectionsLength; rangeIdx++) {
+      const subsection = this.subsections[rangeIdx];
+      await writeToStream(
+        stream,
+        convertStringToUnicodeArray(String(subsection[0].ref.objectNumber)),
+      );
+      await writeToStream(stream, Buffer.from([CharCodes.Space]));
+
+      await writeToStream(
+        stream,
+        convertStringToUnicodeArray(String(subsection.length)),
+      );
+      await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+
+      const entryLength = subsection.length;
+      for (let entryIdx = 0; entryIdx < entryLength; entryIdx++) {
+        const entry = subsection[entryIdx];
+        const entryOffset = padStart(String(entry.offset), 10, '0');
+        await writeToStream(stream, convertStringToUnicodeArray(entryOffset));
+        await writeToStream(stream, Buffer.from([CharCodes.Space]));
+
+        const entryGen = padStart(String(entry.ref.generationNumber), 5, '0');
+        await writeToStream(stream, convertStringToUnicodeArray(entryGen));
+        await writeToStream(stream, Buffer.from([CharCodes.Space]));
+        await writeToStream(
+          stream,
+          Buffer.from([entry.deleted ? CharCodes.f : CharCodes.n]),
+        );
+        await writeToStream(stream, Buffer.from([CharCodes.Space]));
+        await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+      }
+    }
   }
 
   copyBytesInto(buffer: Uint8Array, offset: number): number {

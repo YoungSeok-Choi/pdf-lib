@@ -1,3 +1,6 @@
+import { Writable } from 'stream';
+import PDFContext from '../PDFContext';
+import CharCodes from '../syntax/CharCodes';
 import PDFArray from './PDFArray';
 import PDFBool from './PDFBool';
 import PDFHexString from './PDFHexString';
@@ -8,8 +11,7 @@ import PDFObject from './PDFObject';
 import PDFRef from './PDFRef';
 import PDFStream from './PDFStream';
 import PDFString from './PDFString';
-import PDFContext from '../PDFContext';
-import CharCodes from '../syntax/CharCodes';
+import { writeToStream } from '../../utils';
 
 export type DictMap = Map<PDFName, PDFObject>;
 
@@ -222,6 +224,27 @@ class PDFDict extends PDFObject {
     buffer[offset++] = CharCodes.GreaterThan;
 
     return offset - initialOffset;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
+      Buffer.from([CharCodes.LessThan, CharCodes.LessThan, CharCodes.Newline]),
+    );
+
+    const entries = this.entries();
+    for (let idx = 0, len = entries.length; idx < len; idx++) {
+      const [key, value] = entries[idx];
+      await key.writeBytesInto(stream);
+      await writeToStream(stream, Buffer.from([CharCodes.Space]));
+      await value.writeBytesInto(stream);
+      await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+    }
+
+    await writeToStream(
+      stream,
+      Buffer.from([CharCodes.GreaterThan, CharCodes.GreaterThan]),
+    );
   }
 }
 

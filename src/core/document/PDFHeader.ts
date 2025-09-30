@@ -1,5 +1,11 @@
+import { Writable } from 'stream';
 import CharCodes from '../syntax/CharCodes';
-import { charFromCode, copyStringIntoBuffer } from '../../utils';
+import {
+  charFromCode,
+  convertStringToUnicodeArray,
+  copyStringIntoBuffer,
+  writeToStream,
+} from '../../utils';
 
 class PDFHeader {
   static forVersion = (major: number, minor: number) =>
@@ -47,6 +53,27 @@ class PDFHeader {
     buffer[offset++] = 129;
 
     return offset - initialOffset;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
+      Buffer.from([
+        CharCodes.Percent,
+        CharCodes.P,
+        CharCodes.D,
+        CharCodes.F,
+        CharCodes.Dash,
+      ]),
+    );
+    await writeToStream(stream, convertStringToUnicodeArray(this.major));
+    await writeToStream(stream, Buffer.from([CharCodes.Period]));
+    await writeToStream(stream, convertStringToUnicodeArray(this.minor));
+    await writeToStream(stream, Buffer.from([CharCodes.Newline]));
+    await writeToStream(
+      stream,
+      Buffer.from([CharCodes.Percent, 129, 129, 129, 129]),
+    );
   }
 }
 

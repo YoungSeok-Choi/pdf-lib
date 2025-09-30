@@ -4,10 +4,13 @@ import CharCodes from '../syntax/CharCodes';
 import { IsIrregular } from '../syntax/Irregular';
 import {
   charFromHexCode,
+  convertStringToUnicodeArray,
   copyStringIntoBuffer,
   toCharCode,
   toHexString,
+  writeToStream,
 } from '../../utils';
+import { Writable } from 'stream';
 
 const decodeName = (name: string) =>
   name.replace(/#([\dABCDEF]{2})/g, (_, hex) => charFromHexCode(hex));
@@ -153,6 +156,10 @@ class PDFName extends PDFObject {
   copyBytesInto(buffer: Uint8Array, offset: number): number {
     offset += copyStringIntoBuffer(this.encodedName, buffer, offset);
     return this.encodedName.length;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, convertStringToUnicodeArray(this.encodedName));
   }
 }
 

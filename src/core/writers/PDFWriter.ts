@@ -1,3 +1,14 @@
+import fs from 'fs';
+import path from 'path';
+import { FileDescriptorSaveOptions, FileSaveOptions } from 'src/api';
+import { PassThrough, Writable } from 'stream';
+import { pipeline } from 'stream/promises';
+import {
+  convertStringToUnicodeArray,
+  copyStringIntoBuffer,
+  waitForTick,
+  writeToStream,
+} from '../../utils';
 import PDFCrossRefSection from '../document/PDFCrossRefSection';
 import PDFHeader from '../document/PDFHeader';
 import PDFTrailer from '../document/PDFTrailer';
@@ -7,10 +18,9 @@ import PDFObject from '../objects/PDFObject';
 import PDFRef from '../objects/PDFRef';
 import PDFStream from '../objects/PDFStream';
 import PDFContext from '../PDFContext';
-import PDFObjectStream from '../structures/PDFObjectStream';
 import PDFSecurity from '../security/PDFSecurity';
+import PDFObjectStream from '../structures/PDFObjectStream';
 import CharCodes from '../syntax/CharCodes';
-import { copyStringIntoBuffer, waitForTick } from '../../utils';
 
 export interface SerializationInfo {
   size: number;
@@ -33,6 +43,157 @@ class PDFWriter {
   protected constructor(context: PDFContext, objectsPerTick: number) {
     this.context = context;
     this.objectsPerTick = objectsPerTick;
+  }
+
+  async writeToTargetPathWithStream(
+    options: Pick<FileSaveOptions, 'forceWrite' | 'outputPath'>,
+  ): Promise<boolean> {
+    const { outputPath, forceWrite } = options;
+    const splitPath = outputPath.split('/');
+    const fileName = splitPath.pop();
+    const dirPath = splitPath.join('/');
+
+    if (!fileName) {
+      throw new Error('File name is Missing');
+    }
+
+    const match = fileName.match(/^(.+)\.([a-zA-Z0-9]+)$/);
+    if (!match || match[2] !== 'pdf') {
+      throw new Error('Invalid file extension. Only ".pdf" files are allowed.');
+    }
+
+    if (forceWrite) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    } else {
+      if (!fs.existsSync(outputPath)) {
+        throw Error('File does not exist');
+      }
+    }
+
+    const destWriteStream = fs.createWriteStream(path.join(dirPath, fileName));
+    const pdfStream = new PassThrough();
+    this.serializeToStream(pdfStream).then(() => pdfStream.end());
+
+    await pipeline(pdfStream, destWriteStream);
+    return true;
+  }
+
+  async writeToTargetDescriptorWithStream(
+    options: Pick<
+      FileDescriptorSaveOptions,
+      'forceWrite' | 'outputPath' | 'fd' | 'autoClose'
+    >,
+  ): Promise<boolean> {
+    const { outputPath, forceWrite, fd, autoClose } = options;
+    if (!Number.isInteger(fd) || fd < 0) {
+      throw new Error('Invalid file descriptor.');
+    }
+
+    const splitPath = outputPath.split('/');
+    const fileName = splitPath.pop();
+    const dirPath = splitPath.join('/');
+
+    if (!fileName) {
+      throw new Error('File name is Missing');
+    }
+
+    const match = fileName.match(/^(.+)\.([a-zA-Z0-9]+)$/);
+    if (!match || match[2] !== 'pdf') {
+      throw new Error('Invalid file extension. Only ".pdf" files are allowed.');
+    }
+
+    if (forceWrite) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    } else {
+      if (!fs.existsSync(outputPath)) {
+        throw Error('File does not exist');
+      }
+    }
+
+    const destWriteStream = fs.createWriteStream(path.join(dirPath, fileName), {
+      fd,
+      autoClose: autoClose ?? false,
+    });
+    const pdfStream = new PassThrough();
+    this.serializeToStream(pdfStream).then(() => pdfStream.end());
+
+    await pipeline(pdfStream, destWriteStream);
+
+    fs.accessSync(dirPath);
+    fs.rmSync(dirPath);
+    destWriteStream.close();
+
+    return true;
+  }
+
+  async serializeToStream(destStream: Writable): Promise<void> {
+    const { header, indirectObjects, xref, trailerDict, trailer } =
+      await this.computeBufferSize();
+
+    await header.writeBytesInto(destStream);
+    await writeToStream(
+      destStream,
+      Buffer.from([CharCodes.Newline, CharCodes.Newline]),
+    );
+
+    for (let idx = 0, len = indirectObjects.length; idx < len; idx++) {
+      const [ref, object] = indirectObjects[idx];
+
+      const objectNumber = String(ref.objectNumber);
+      await writeToStream(
+        destStream,
+        convertStringToUnicodeArray(objectNumber),
+      );
+      await writeToStream(destStream, Buffer.from([CharCodes.Space]));
+
+      const generationNumber = String(ref.generationNumber);
+      await writeToStream(
+        destStream,
+        convertStringToUnicodeArray(generationNumber),
+      );
+      await writeToStream(destStream, Buffer.from([CharCodes.Space]));
+
+      await writeToStream(
+        destStream,
+        Buffer.from([CharCodes.o, CharCodes.b, CharCodes.j, CharCodes.Newline]),
+      );
+
+      await object.writeBytesInto(destStream);
+
+      await writeToStream(
+        destStream,
+        Buffer.from([
+          CharCodes.Newline,
+          CharCodes.e,
+          CharCodes.n,
+          CharCodes.d,
+          CharCodes.o,
+          CharCodes.b,
+          CharCodes.j,
+          CharCodes.Newline,
+          CharCodes.Newline,
+        ]),
+      );
+
+      const n =
+        object instanceof PDFObjectStream ? object.getObjectsCount() : 1;
+      if (this.shouldWaitForTick(n)) await waitForTick();
+    }
+
+    if (xref) {
+      await xref.writeBytesInto(destStream);
+      await writeToStream(destStream, Buffer.from([CharCodes.Newline]));
+    }
+
+    if (trailerDict) {
+      await trailerDict.writeBytesInto(destStream);
+      await writeToStream(
+        destStream,
+        Buffer.from([CharCodes.Newline, CharCodes.Newline]),
+      );
+    }
+
+    await trailer.writeBytesInto(destStream);
   }
 
   async serializeToBuffer(): Promise<Uint8Array> {

@@ -1,5 +1,10 @@
 import CharCodes from '../syntax/CharCodes';
-import { copyStringIntoBuffer } from '../../utils';
+import {
+  convertStringToUnicodeArray,
+  copyStringIntoBuffer,
+  writeToStream,
+} from '../../utils';
+import { Writable } from 'stream';
 
 class PDFTrailer {
   static forLastCrossRefSectionOffset = (offset: number) =>
@@ -43,6 +48,41 @@ class PDFTrailer {
     buffer[offset++] = CharCodes.F;
 
     return offset - initialOffset;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(
+      stream,
+      Buffer.from([
+        CharCodes.s,
+        CharCodes.t,
+        CharCodes.a,
+        CharCodes.r,
+        CharCodes.t,
+        CharCodes.x,
+        CharCodes.r,
+        CharCodes.e,
+        CharCodes.f,
+        CharCodes.Newline,
+      ]),
+    );
+
+    await writeToStream(
+      stream,
+      convertStringToUnicodeArray(this.lastXRefOffset),
+    );
+
+    await writeToStream(
+      stream,
+      Buffer.from([
+        CharCodes.Newline,
+        CharCodes.Percent,
+        CharCodes.Percent,
+        CharCodes.E,
+        CharCodes.O,
+        CharCodes.F,
+      ]),
+    );
   }
 }
 

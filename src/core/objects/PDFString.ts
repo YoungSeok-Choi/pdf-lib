@@ -8,8 +8,11 @@ import {
   toCharCode,
   parseDate,
   hasUtf16BOM,
+  convertStringToUnicodeArray,
+  writeToStream,
 } from '../../utils';
 import { InvalidPDFDateStringError } from '../errors';
+import { Writable } from 'stream';
 
 class PDFString extends PDFObject {
   // The PDF spec allows newlines and parens to appear directly within a literal
@@ -112,6 +115,12 @@ class PDFString extends PDFObject {
     offset += copyStringIntoBuffer(this.value, buffer, offset);
     buffer[offset++] = CharCodes.RightParen;
     return this.value.length + 2;
+  }
+
+  async writeBytesInto(stream: Writable): Promise<void> {
+    await writeToStream(stream, Buffer.from([CharCodes.LeftParen]));
+    await writeToStream(stream, convertStringToUnicodeArray(this.value));
+    await writeToStream(stream, Buffer.from([CharCodes.RightParen]));
   }
 }
 
